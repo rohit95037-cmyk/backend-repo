@@ -1,21 +1,43 @@
 const express = require("express");
 const router = express.Router();
 const { verifyToken, isTeacher } = require("../middleware/auth");
-const { assignments } = require("../models/data");
+const { assignments, submissions } = require("../models/data");
 
 // GET /api/assignments - Get all assignments (role-based)
 router.get("/", verifyToken, (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    let filteredAssignments;
     if (req.user.role === "teacher") {
       // Teachers can see all their assignments
-      res.json({ success: true, assignments });
+      filteredAssignments = assignments;
     } else {
       // Students can only see published assignments
-      const publishedAssignments = assignments.filter(
+      filteredAssignments = assignments.filter(
         (a) => a.status === "published"
       );
-      res.json({ success: true, assignments: publishedAssignments });
     }
+
+    // Apply pagination
+    const paginatedAssignments = filteredAssignments.slice(offset, offset + limit);
+    const totalAssignments = filteredAssignments.length;
+    const totalPages = Math.ceil(totalAssignments / limit);
+
+    res.json({ 
+      success: true, 
+      assignments: paginatedAssignments,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalAssignments,
+        limit,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    });
   } catch (error) {
     console.error("Get assignments error:", error);
     res.status(500).json({ error: "Server error fetching assignments" });
@@ -184,6 +206,67 @@ router.delete("/:id", verifyToken, isTeacher, (req, res) => {
   } catch (error) {
     console.error("Delete assignment error:", error);
     res.status(500).json({ error: "Server error deleting assignment" });
+  }
+});
+
+// GET /api/assignments/analytics/dashboard - Get dashboard analytics (Teachers only)
+router.get("/analytics/dashboard", verifyToken, isTeacher, (req, res) => {
+  try {
+    const teacherAssignments = assignments.filter(a => a.teacherId === req.user.id);
+    
+    const analytics = {
+      totalAssignments: teacherAssignments.length,
+      assignmentsByStatus: {
+        draft: teacherAssignments.filter(a => a.status === 'draft').length,
+        published: teacherAssignments.filter(a => a.status === 'published').length,
+        completed: teacherAssignments.filter(a => a.status === 'completed').length
+      },
+      submissionStats: teacherAssignments.map(assignment => {
+        const assignmentSubmissions = submissions.filter(s => s.assignmentId === assignment.id);
+        const reviewedSubmissions = assignmentSubmissions.filter(s => s.isReviewed);
+        
+        return {
+          assignmentId: assignment.id,
+          assignmentTitle: assignment.title,
+          totalSubmissions: assignmentSubmissions.length,
+          reviewedSubmissions: reviewedSubmissions.length,
+          pendingReview: assignmentSubmissions.length - reviewedSubmissions.length,
+          submissionRate: teacherAssignments.length > 0 ? 
+            ((assignmentSubmissions.length / teacherAssignments.length) * 100).toFixed(1) : 0
+        };
+      }),
+      recentActivity: {
+        recentAssignments: teacherAssignments
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+          .slice(0, 5)
+          .map(a => ({
+            id: a.id,
+            title: a.title,
+            status: a.status,
+            createdAt: a.createdAt,
+            dueDate: a.dueDate
+          })),
+        recentSubmissions: submissions
+          .filter(s => teacherAssignments.some(a => a.id === s.assignmentId))
+          .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt))
+          .slice(0, 5)
+          .map(s => ({
+            id: s.id,
+            assignmentTitle: teacherAssignments.find(a => a.id === s.assignmentId)?.title,
+            studentName: s.studentName,
+            submittedAt: s.submittedAt,
+            isReviewed: s.isReviewed
+          }))
+      }
+    };
+
+    res.json({
+      success: true,
+      analytics
+    });
+  } catch (error) {
+    console.error("Get analytics error:", error);
+    res.status(500).json({ error: "Server error fetching analytics" });
   }
 });
 

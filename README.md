@@ -11,6 +11,9 @@ A robust RESTful API built with Node.js and Express.js for managing assignments 
 - ✅ **State Transitions** - Draft → Published → Completed workflow
 - ✅ **CORS Support** - Cross-origin resource sharing enabled
 - ✅ **Error Handling** - Comprehensive error handling middleware
+- ✅ **Due Date Validation** - Prevents submissions after assignment deadline
+- ✅ **Pagination** - Efficient data loading with pagination support
+- ✅ **Dashboard Analytics** - Teacher analytics with submission statistics
 
 ## Tech Stack
 
@@ -78,6 +81,7 @@ curl http://localhost:5000/api/health
 ```
 
 Expected response:
+
 ```json
 {
   "status": "OK",
@@ -96,9 +100,11 @@ Expected response:
 ### Authentication Endpoints
 
 #### POST /api/auth/login
+
 Login with email and password to receive JWT token.
 
 **Request Body:**
+
 ```json
 {
   "email": "teacher@test.com",
@@ -107,6 +113,7 @@ Login with email and password to receive JWT token.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -121,30 +128,58 @@ Login with email and password to receive JWT token.
 ```
 
 #### POST /api/auth/register
+
 Register a new user account.
 
 #### GET /api/auth/me
+
 Get current user information (requires authentication).
 
 ### Assignment Endpoints
 
 #### GET /api/assignments
-Get all assignments (role-based filtering):
+
+Get all assignments (role-based filtering) with pagination:
+
 - **Teachers**: See all assignments
 - **Students**: See only published assignments
 
+**Query Parameters:**
+- `page` (optional): Page number (default: 1)
+- `limit` (optional): Items per page (default: 10)
+
 **Headers:**
+
 ```
 Authorization: Bearer <your_jwt_token>
 ```
 
+**Response:**
+```json
+{
+  "success": true,
+  "assignments": [...],
+  "pagination": {
+    "currentPage": 1,
+    "totalPages": 3,
+    "totalAssignments": 25,
+    "limit": 10,
+    "hasNextPage": true,
+    "hasPrevPage": false
+  }
+}
+```
+
 #### GET /api/assignments/:id
+
 Get a specific assignment by ID.
 
 #### POST /api/assignments
+
 Create a new assignment (Teachers only).
 
 **Request Body:**
+
 ```json
 {
   "title": "React Fundamentals Assignment",
@@ -154,12 +189,15 @@ Create a new assignment (Teachers only).
 ```
 
 #### PUT /api/assignments/:id
+
 Update an assignment (Teachers only, draft status only).
 
 #### PATCH /api/assignments/:id/status
+
 Change assignment status (Teachers only).
 
 **Request Body:**
+
 ```json
 {
   "status": "published"
@@ -167,29 +205,75 @@ Change assignment status (Teachers only).
 ```
 
 **Valid Status Transitions:**
+
 - `draft` → `published`
 - `published` → `completed`
 
 #### DELETE /api/assignments/:id
+
 Delete an assignment (Teachers only, draft status only).
+
+#### GET /api/assignments/analytics/dashboard
+
+Get comprehensive dashboard analytics for teachers (Teachers only).
+
+**Headers:**
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "analytics": {
+    "totalAssignments": 5,
+    "assignmentsByStatus": {
+      "draft": 1,
+      "published": 3,
+      "completed": 1
+    },
+    "submissionStats": [
+      {
+        "assignmentId": 1,
+        "assignmentTitle": "React Fundamentals",
+        "totalSubmissions": 15,
+        "reviewedSubmissions": 12,
+        "pendingReview": 3,
+        "submissionRate": "75.0"
+      }
+    ],
+    "recentActivity": {
+      "recentAssignments": [...],
+      "recentSubmissions": [...]
+    }
+  }
+}
+```
 
 ### Submission Endpoints
 
 #### GET /api/submissions
+
 Get submissions (role-based):
+
 - **Teachers**: See all submissions
 - **Students**: See only their own submissions
 
 #### GET /api/submissions/assignment/:assignmentId
+
 Get all submissions for a specific assignment (Teachers only).
 
 #### GET /api/submissions/my/:assignmentId
+
 Get student's own submission for an assignment (Students only).
 
 #### POST /api/submissions
-Submit an assignment (Students only).
+
+Submit an assignment (Students only). **Note**: Submissions are automatically rejected if submitted after the assignment's due date.
 
 **Request Body:**
+
 ```json
 {
   "assignmentId": 1,
@@ -198,18 +282,30 @@ Submit an assignment (Students only).
 }
 ```
 
+**Error Response (Past Due Date):**
+```json
+{
+  "error": "Assignment submission deadline has passed",
+  "dueDate": "2025-11-01",
+  "currentDate": "2025-11-02"
+}
+```
+
 #### PATCH /api/submissions/:id/review
+
 Mark submission as reviewed (Teachers only).
 
 ## Default Test Accounts
 
 ### Teacher Account
+
 - **Email**: `teacher@test.com`
 - **Password**: `teacher123`
 - **Role**: `teacher`
 - **Permissions**: Create, read, update, delete assignments; view all submissions
 
 ### Student Account
+
 - **Email**: `student@test.com`
 - **Password**: `student123`
 - **Role**: `student`
@@ -264,34 +360,40 @@ All API endpoints return consistent error responses:
 ## Additional Notes and Assumptions
 
 ### Database Implementation
+
 - **Current**: Uses in-memory storage for simplicity and demonstration
 - **Production**: Should be replaced with MongoDB, PostgreSQL, or similar database
 - **Data Persistence**: Data is lost when server restarts (development only)
 
 ### Authentication Flow
+
 - JWT tokens are required for all protected routes
 - Tokens expire after 24 hours and must be refreshed
 - User roles are embedded in the JWT token for authorization
 
 ### Assignment Workflow
+
 - Assignments start in `draft` status
 - Teachers can publish drafts to make them visible to students
 - Published assignments can be marked as `completed`
 - Students can only submit to published assignments
 
 ### Frontend Integration
+
 - API is designed to work with React frontend
 - CORS is configured for `http://localhost:5173` (Vite default)
 - All responses are in JSON format
 - Error handling is consistent across all endpoints
 
 ### Development Assumptions
+
 - Server runs on port 5000 by default
 - Frontend runs on port 5173 (Vite default)
 - JWT secret should be changed in production
 - Environment variables are loaded from `.env` file
 
 ### Production Considerations
+
 - Replace in-memory database with persistent storage
 - Implement proper logging and monitoring
 - Add rate limiting to prevent abuse

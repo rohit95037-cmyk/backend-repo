@@ -89,6 +89,17 @@ router.post("/", verifyToken, isStudent, (req, res) => {
       return res.status(400).json({ error: "Assignment is not published" });
     }
 
+    // Check if assignment is past due date
+    const currentDate = new Date();
+    const dueDate = new Date(assignment.dueDate);
+    if (currentDate > dueDate) {
+      return res.status(400).json({ 
+        error: "Assignment submission deadline has passed",
+        dueDate: assignment.dueDate,
+        currentDate: currentDate.toISOString().split('T')[0]
+      });
+    }
+
     // Check if student has already submitted
     const existingSubmission = submissions.find(
       (s) =>
